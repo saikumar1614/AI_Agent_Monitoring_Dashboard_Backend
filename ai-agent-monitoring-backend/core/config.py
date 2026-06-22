@@ -1,9 +1,13 @@
 import os
 from typing import List
-from dotenv import load_dotenv
 
-# Load .env file if it exists
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # python-dotenv not installed, fall back to environment variables only
+    def load_dotenv():
+        pass
 
 
 class Settings:
