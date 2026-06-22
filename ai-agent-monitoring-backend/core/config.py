@@ -5,12 +5,12 @@ try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    # python-dotenv not installed, fall back to environment variables only
-    def load_dotenv():
-        pass
+    pass
 
 
 class Settings:
+    """Application settings and configuration"""
+    
     # Application settings
     APP_NAME: str = os.getenv("APP_NAME", "AI Agent Monitoring Dashboard Backend")
     APP_VERSION: str = os.getenv("APP_VERSION", "1.0.0")
