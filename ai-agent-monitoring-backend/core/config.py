@@ -1,11 +1,12 @@
 import os
 from typing import List
 
+# Load environment variables from .env file
 try:
-    from dotenv import load_dotenv
+    from dotenv import load_dotenv  # type: ignore
     load_dotenv()
 except ImportError:
-    pass
+    pass  # python-dotenv not installed, use system env vars
 
 
 class Settings:
