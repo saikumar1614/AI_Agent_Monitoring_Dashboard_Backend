@@ -39,5 +39,17 @@ class Settings:
         for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
     ]
 
+    # Telemetry settings
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_JSON: bool = os.getenv("LOG_JSON", "True").lower() == "true"
+    ENABLE_TRACING: bool = os.getenv("ENABLE_TRACING", "True").lower() == "true"
+    ENABLE_METRICS: bool = os.getenv("ENABLE_METRICS", "True").lower() == "true"
+    ENABLE_LOGGING: bool = os.getenv("ENABLE_LOGGING", "True").lower() == "true"
+    TELEMETRY_EXPORTER: str = os.getenv("TELEMETRY_EXPORTER", "otlp")
+    OTEL_SERVICE_NAME: str = os.getenv("OTEL_SERVICE_NAME", APP_NAME)
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+    OTEL_EXPORTER_OTLP_PROTOCOL: str = os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+    METRICS_PATH: str = os.getenv("METRICS_PATH", "/metrics")
+
 
 settings = Settings()

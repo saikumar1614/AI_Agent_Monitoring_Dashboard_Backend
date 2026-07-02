@@ -17,6 +17,7 @@ from database.connection import engine
 from models.user import User  # noqa: F401
 from models.agent import Agent  # noqa: F401
 from models.execution import Execution  # noqa: F401
+from telemetry.opentelemetry_config import configure_telemetry
 
 # Create tables on startup
 Base.metadata.create_all(bind=engine)
@@ -38,6 +39,8 @@ app = FastAPI(
     debug=settings.DEBUG,
     lifespan=lifespan,
 )
+
+configure_telemetry(app, db_engine=engine)
 
 # Add CORS middleware
 app.add_middleware(
