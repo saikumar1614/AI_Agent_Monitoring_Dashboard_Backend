@@ -51,5 +51,11 @@ class Settings:
     OTEL_EXPORTER_OTLP_PROTOCOL: str = os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
     METRICS_PATH: str = os.getenv("METRICS_PATH", "/metrics")
 
+    # Langfuse settings
+    LANGFUSE_ENABLED: bool = os.getenv("LANGFUSE_ENABLED", "True").lower() == "true"
+    LANGFUSE_PUBLIC_KEY: str = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+    LANGFUSE_SECRET_KEY: str = os.getenv("LANGFUSE_SECRET_KEY", "")
+    LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+
 
 settings = Settings()

@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from api.auth.auth_routes import router as auth_router
 from api.agents.agent_routes import router as agent_router
 from api.executions.execution_routes import router as execution_router
+from api.langfuse.langfuse_routes import router as langfuse_router
 from core.config import settings
 from database.base import Base
 from database.connection import engine
@@ -54,6 +55,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(agent_router)
 app.include_router(execution_router)
+app.include_router(langfuse_router)
 
 
 # Health check endpoint
