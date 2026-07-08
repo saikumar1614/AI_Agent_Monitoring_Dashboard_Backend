@@ -13,6 +13,7 @@ from api.agents.agent_routes import router as agent_router
 from api.executions.execution_routes import router as execution_router
 from api.langfuse.langfuse_routes import router as langfuse_router
 from api.dashboard.dashboard_routes import router as dashboard_router
+from api.live.live_routes import router as live_router
 from core.config import settings
 from database.base import Base
 from database.connection import engine
@@ -58,6 +59,7 @@ app.include_router(agent_router)
 app.include_router(execution_router)
 app.include_router(langfuse_router)
 app.include_router(dashboard_router)
+app.include_router(live_router)
 
 
 # Health check endpoint
