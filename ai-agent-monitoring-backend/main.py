@@ -14,12 +14,16 @@ from api.executions.execution_routes import router as execution_router
 from api.langfuse.langfuse_routes import router as langfuse_router
 from api.dashboard.dashboard_routes import router as dashboard_router
 from api.live.live_routes import router as live_router
+from api.tool_usage.tool_usage_routes import router as tool_usage_router
+from api.failures.failure_routes import router as failure_router
 from core.config import settings
 from database.base import Base
 from database.connection import engine
 from models.user import User  # noqa: F401
 from models.agent import Agent  # noqa: F401
 from models.execution import Execution  # noqa: F401
+from models.tool_usage import ToolUsage  # noqa: F401
+from models.failure import Failure  # noqa: F401
 from telemetry.opentelemetry_config import configure_telemetry
 
 # Create tables on startup
@@ -60,6 +64,8 @@ app.include_router(execution_router)
 app.include_router(langfuse_router)
 app.include_router(dashboard_router)
 app.include_router(live_router)
+app.include_router(tool_usage_router)
+app.include_router(failure_router)
 
 
 # Health check endpoint
