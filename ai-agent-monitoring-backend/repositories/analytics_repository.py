@@ -1,4 +1,5 @@
 from models.execution import Execution
+from sqlalchemy import func
 
 
 SUCCESS_STATUSES = {"succeeded"}
@@ -79,3 +80,65 @@ def get_dashboard_kpis(db) -> dict[str, float | int]:
 		"total_tokens": total_tokens,
 		"average_latency": average_latency,
 	}
+
+
+def get_hourly_latency_aggregation(db, start_dt, end_dt) -> list[dict]:
+	bucket_expr = func.strftime("%Y-%m-%d %H:00", Execution.created_at)
+	rows = (
+		db.query(bucket_expr.label("bucket"), func.count(Execution.id).label("sample_size"))
+		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
+		.group_by(bucket_expr)
+		.order_by(bucket_expr.asc())
+		.all()
+	)
+
+	results: list[dict] = []
+	for row in rows:
+		latency_rows = (
+			db.query(Execution)
+			.filter(bucket_expr == row.bucket)
+			.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
+			.all()
+		)
+		latencies = [_extract_latency_ms(item) for item in latency_rows if _extract_latency_ms(item) > 0]
+		avg_latency = (sum(latencies) / len(latencies)) if latencies else 0.0
+		results.append(
+			{
+				"bucket": row.bucket,
+				"average_latency_ms": avg_latency,
+				"sample_size": int(row.sample_size),
+			}
+		)
+
+	return results
+
+
+def get_daily_latency_aggregation(db, start_dt, end_dt) -> list[dict]:
+	bucket_expr = func.strftime("%Y-%m-%d", Execution.created_at)
+	rows = (
+		db.query(bucket_expr.label("bucket"), func.count(Execution.id).label("sample_size"))
+		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
+		.group_by(bucket_expr)
+		.order_by(bucket_expr.asc())
+		.all()
+	)
+
+	results: list[dict] = []
+	for row in rows:
+		latency_rows = (
+			db.query(Execution)
+			.filter(bucket_expr == row.bucket)
+			.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
+			.all()
+		)
+		latencies = [_extract_latency_ms(item) for item in latency_rows if _extract_latency_ms(item) > 0]
+		avg_latency = (sum(latencies) / len(latencies)) if latencies else 0.0
+		results.append(
+			{
+				"bucket": row.bucket,
+				"average_latency_ms": avg_latency,
+				"sample_size": int(row.sample_size),
+			}
+		)
+
+	return results

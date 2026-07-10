@@ -16,6 +16,7 @@ from api.dashboard.dashboard_routes import router as dashboard_router
 from api.live.live_routes import router as live_router
 from api.tool_usage.tool_usage_routes import router as tool_usage_router
 from api.failures.failure_routes import router as failure_router
+from api.analytics.analytics_routes import router as analytics_router
 from core.config import settings
 from database.base import Base
 from database.connection import engine
@@ -66,6 +67,7 @@ app.include_router(dashboard_router)
 app.include_router(live_router)
 app.include_router(tool_usage_router)
 app.include_router(failure_router)
+app.include_router(analytics_router)
 
 
 # Health check endpoint
