@@ -20,6 +20,50 @@ services:
     networks:
       - ai_monitoring_network
 
+  tempo:
+    image: grafana/tempo:2.5.0
+    container_name: ai_monitoring_tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./infra/tempo/tempo.yaml:/etc/tempo.yaml:ro
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+    networks:
+      - ai_monitoring_network
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.107.0
+    container_name: ai_monitoring_otel_collector
+    command: ["--config=/etc/otelcol/otel-collector-config.yaml"]
+    volumes:
+      - ./infra/otel/otel-collector-config.yaml:/etc/otelcol/otel-collector-config.yaml:ro
+    depends_on:
+      - tempo
+    ports:
+      - "4318:4318"
+    networks:
+      - ai_monitoring_network
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: ai_monitoring_grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tempo:
+        condition: service_started
+    networks:
+      - ai_monitoring_network
+
   fastapi:
     build:
       context: .
@@ -31,11 +75,16 @@ services:
       HOST: 0.0.0.0
       PORT: 8000
       SECRET_KEY: your-secret-key-change-in-production
+      ENABLE_TRACING: 'True'
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     volumes:
       - .:/app
     networks:
@@ -44,6 +93,7 @@ services:
 
 volumes:
   postgres_data: {}
+  grafana_data: {}
 
 networks:
   ai_monitoring_network:

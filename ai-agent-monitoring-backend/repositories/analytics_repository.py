@@ -31,6 +31,24 @@ def _extract_tokens(metadata: dict | None) -> int:
 	return 0
 
 
+def _extract_prompt_tokens(metadata: dict | None) -> int:
+	if not metadata:
+		return 0
+	value = metadata.get("prompt_tokens")
+	if isinstance(value, (int, float)):
+		return int(value)
+	return 0
+
+
+def _extract_completion_tokens(metadata: dict | None) -> int:
+	if not metadata:
+		return 0
+	value = metadata.get("completion_tokens")
+	if isinstance(value, (int, float)):
+		return int(value)
+	return 0
+
+
 def _extract_latency_ms(execution: Execution) -> float:
 	metadata = execution.execution_metadata or {}
 	latency_ms = metadata.get("latency_ms")
@@ -142,3 +160,59 @@ def get_daily_latency_aggregation(db, start_dt, end_dt) -> list[dict]:
 		)
 
 	return results
+
+
+def get_hourly_token_aggregation(db, start_dt, end_dt) -> list[dict]:
+	bucket_expr = func.strftime("%Y-%m-%d %H:00", Execution.created_at)
+	rows = (
+		db.query(bucket_expr.label("bucket"), Execution.execution_metadata)
+		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
+		.order_by(bucket_expr.asc())
+		.all()
+	)
+
+	agg: dict[str, dict] = {}
+	for bucket, metadata in rows:
+		if bucket not in agg:
+			agg[bucket] = {
+				"bucket": bucket,
+				"prompt_tokens": 0,
+				"completion_tokens": 0,
+				"total_tokens": 0,
+				"execution_count": 0,
+			}
+
+		agg[bucket]["prompt_tokens"] += _extract_prompt_tokens(metadata)
+		agg[bucket]["completion_tokens"] += _extract_completion_tokens(metadata)
+		agg[bucket]["total_tokens"] += _extract_tokens(metadata)
+		agg[bucket]["execution_count"] += 1
+
+	return [agg[key] for key in sorted(agg.keys())]
+
+
+def get_daily_token_aggregation(db, start_dt, end_dt) -> list[dict]:
+	bucket_expr = func.strftime("%Y-%m-%d", Execution.created_at)
+	rows = (
+		db.query(bucket_expr.label("bucket"), Execution.execution_metadata)
+		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
+		.order_by(bucket_expr.asc())
+		.all()
+	)
+
+	agg: dict[str, dict] = {}
+	for bucket, metadata in rows:
+		if bucket not in agg:
+			agg[bucket] = {
+				"bucket": bucket,
+				"prompt_tokens": 0,
+				"completion_tokens": 0,
+				"total_tokens": 0,
+				"execution_count": 0,
+			}
+
+		agg[bucket]["prompt_tokens"] += _extract_prompt_tokens(metadata)
+		agg[bucket]["completion_tokens"] += _extract_completion_tokens(metadata)
+		agg[bucket]["total_tokens"] += _extract_tokens(metadata)
+		agg[bucket]["execution_count"] += 1
+
+	return [agg[key] for key in sorted(agg.keys())]

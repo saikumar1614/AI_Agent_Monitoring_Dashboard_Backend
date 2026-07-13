@@ -4,10 +4,17 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from repositories.analytics_repository import (
+	get_daily_token_aggregation,
 	get_daily_latency_aggregation,
+	get_hourly_token_aggregation,
 	get_hourly_latency_aggregation,
 )
-from schemas.analytics_schema import LatencyAggregationResponse, LatencyBucketResponse
+from schemas.analytics_schema import (
+	LatencyAggregationResponse,
+	LatencyBucketResponse,
+	TokenAggregationResponse,
+	TokenBucketResponse,
+)
 
 
 def _to_datetime_range(start_date: date, end_date: date) -> tuple[datetime, datetime]:
@@ -57,6 +64,58 @@ def get_daily_latency_service(db: Session, start_date: date, end_date: date) -> 
 		granularity="daily",
 		start_date=start_date,
 		end_date=end_date,
+		total_buckets=len(items),
+		items=items,
+	)
+
+
+def get_hourly_token_service(db: Session, start_date: date, end_date: date) -> TokenAggregationResponse:
+	start_dt, end_dt = _to_datetime_range(start_date, end_date)
+	rows = get_hourly_token_aggregation(db, start_dt, end_dt)
+	items = [
+		TokenBucketResponse(
+			bucket=row["bucket"],
+			prompt_tokens=int(row["prompt_tokens"]),
+			completion_tokens=int(row["completion_tokens"]),
+			total_tokens=int(row["total_tokens"]),
+			execution_count=int(row["execution_count"]),
+		)
+		for row in rows
+	]
+
+	return TokenAggregationResponse(
+		granularity="hourly",
+		start_date=start_date,
+		end_date=end_date,
+		total_prompt_tokens=sum(item.prompt_tokens for item in items),
+		total_completion_tokens=sum(item.completion_tokens for item in items),
+		total_tokens=sum(item.total_tokens for item in items),
+		total_buckets=len(items),
+		items=items,
+	)
+
+
+def get_daily_token_service(db: Session, start_date: date, end_date: date) -> TokenAggregationResponse:
+	start_dt, end_dt = _to_datetime_range(start_date, end_date)
+	rows = get_daily_token_aggregation(db, start_dt, end_dt)
+	items = [
+		TokenBucketResponse(
+			bucket=row["bucket"],
+			prompt_tokens=int(row["prompt_tokens"]),
+			completion_tokens=int(row["completion_tokens"]),
+			total_tokens=int(row["total_tokens"]),
+			execution_count=int(row["execution_count"]),
+		)
+		for row in rows
+	]
+
+	return TokenAggregationResponse(
+		granularity="daily",
+		start_date=start_date,
+		end_date=end_date,
+		total_prompt_tokens=sum(item.prompt_tokens for item in items),
+		total_completion_tokens=sum(item.completion_tokens for item in items),
+		total_tokens=sum(item.total_tokens for item in items),
 		total_buckets=len(items),
 		items=items,
 	)
