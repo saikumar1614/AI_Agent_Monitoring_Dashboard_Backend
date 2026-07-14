@@ -1,4 +1,5 @@
 from models.execution import Execution
+from models.agent import Agent
 from sqlalchemy import func
 
 
@@ -216,3 +217,52 @@ def get_daily_token_aggregation(db, start_dt, end_dt) -> list[dict]:
 		agg[bucket]["execution_count"] += 1
 
 	return [agg[key] for key in sorted(agg.keys())]
+
+
+def get_daily_cost_trend_aggregation(db, start_dt, end_dt) -> list[dict]:
+	bucket_expr = func.strftime("%Y-%m-%d", Execution.created_at)
+	rows = (
+		db.query(bucket_expr.label("bucket"), Execution.execution_metadata)
+		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
+		.order_by(bucket_expr.asc())
+		.all()
+	)
+
+	agg: dict[str, dict] = {}
+	for bucket, metadata in rows:
+		if bucket not in agg:
+			agg[bucket] = {
+				"bucket": bucket,
+				"total_cost_usd": 0.0,
+				"execution_count": 0,
+			}
+
+		agg[bucket]["total_cost_usd"] += _extract_cost(metadata)
+		agg[bucket]["execution_count"] += 1
+
+	return [agg[key] for key in sorted(agg.keys())]
+
+
+def get_cost_per_agent_aggregation(db, start_dt, end_dt) -> list[dict]:
+	rows = (
+		db.query(Execution.agent_id, Agent.name, Execution.execution_metadata)
+		.join(Agent, Agent.id == Execution.agent_id)
+		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
+		.order_by(Agent.name.asc())
+		.all()
+	)
+
+	agg: dict[int, dict] = {}
+	for agent_id, agent_name, metadata in rows:
+		if agent_id not in agg:
+			agg[agent_id] = {
+				"agent_id": int(agent_id),
+				"agent_name": agent_name,
+				"total_cost_usd": 0.0,
+				"execution_count": 0,
+			}
+
+		agg[agent_id]["total_cost_usd"] += _extract_cost(metadata)
+		agg[agent_id]["execution_count"] += 1
+
+	return [agg[key] for key in sorted(agg.keys(), key=lambda k: agg[k]["agent_name"])]

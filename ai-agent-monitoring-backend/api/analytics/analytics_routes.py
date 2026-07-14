@@ -6,8 +6,15 @@ from sqlalchemy.orm import Session
 from core.security import get_current_user
 from database.session import get_db
 from models.user import User
-from schemas.analytics_schema import LatencyAggregationResponse, TokenAggregationResponse
+from schemas.analytics_schema import (
+	CostPerAgentAggregationResponse,
+	CostTrendAggregationResponse,
+	LatencyAggregationResponse,
+	TokenAggregationResponse,
+)
 from services.analytics_service import (
+	get_cost_per_agent_service,
+	get_daily_cost_trend_service,
 	get_daily_latency_service,
 	get_daily_token_service,
 	get_hourly_latency_service,
@@ -56,3 +63,23 @@ def get_daily_tokens(
 	db: Session = Depends(get_db),
 ) -> TokenAggregationResponse:
 	return get_daily_token_service(db, start_date=start_date, end_date=end_date)
+
+
+@router.get("/cost/trends", response_model=CostTrendAggregationResponse)
+def get_cost_trends(
+	start_date: date = Query(...),
+	end_date: date = Query(...),
+	current_user: User = Depends(get_current_user),
+	db: Session = Depends(get_db),
+) -> CostTrendAggregationResponse:
+	return get_daily_cost_trend_service(db, start_date=start_date, end_date=end_date)
+
+
+@router.get("/cost/per-agent", response_model=CostPerAgentAggregationResponse)
+def get_cost_per_agent(
+	start_date: date = Query(...),
+	end_date: date = Query(...),
+	current_user: User = Depends(get_current_user),
+	db: Session = Depends(get_db),
+) -> CostPerAgentAggregationResponse:
+	return get_cost_per_agent_service(db, start_date=start_date, end_date=end_date)
