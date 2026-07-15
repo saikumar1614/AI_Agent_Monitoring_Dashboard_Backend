@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -8,6 +8,11 @@ from database.base import Base
 
 class ToolUsage(Base):
 	__tablename__ = "tool_usage"
+	__table_args__ = (
+		Index("ix_tool_usage_execution_created", "execution_id", "created_at"),
+		Index("ix_tool_usage_status_created", "status", "created_at"),
+		Index("ix_tool_usage_tool_created", "tool_name", "created_at"),
+	)
 
 	id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 	execution_id: Mapped[int] = mapped_column(ForeignKey("executions.id"), nullable=False, index=True)

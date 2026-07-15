@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -8,6 +8,9 @@ from database.base import Base
 
 class Agent(Base):
     __tablename__ = "agents"
+    __table_args__ = (
+        Index("ix_agents_active_created", "is_active", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)

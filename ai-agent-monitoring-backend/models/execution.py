@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -8,6 +8,10 @@ from database.base import Base
 
 class Execution(Base):
     __tablename__ = "executions"
+    __table_args__ = (
+        Index("ix_executions_agent_created", "agent_id", "created_at"),
+        Index("ix_executions_status_created", "status", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     agent_id: Mapped[int] = mapped_column(ForeignKey("agents.id"), nullable=False, index=True)

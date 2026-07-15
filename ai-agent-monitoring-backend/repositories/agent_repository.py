@@ -22,7 +22,7 @@ def list_agents(
         query = query.filter(Agent.is_active == is_active)
     
     total = query.count()
-    agents = query.offset(skip).limit(limit).order_by(Agent.created_at.desc()).all()
+    agents = query.order_by(Agent.created_at.desc()).offset(skip).limit(limit).all()
     return agents, total
 
 

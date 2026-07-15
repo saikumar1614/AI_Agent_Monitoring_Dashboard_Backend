@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -8,6 +8,11 @@ from database.base import Base
 
 class Failure(Base):
 	__tablename__ = "failures"
+	__table_args__ = (
+		Index("ix_failures_execution_occurred", "execution_id", "occurred_at"),
+		Index("ix_failures_category_occurred", "error_category", "occurred_at"),
+		Index("ix_failures_severity_occurred", "severity", "occurred_at"),
+	)
 
 	id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 	execution_id: Mapped[int] = mapped_column(ForeignKey("executions.id"), nullable=False, index=True)

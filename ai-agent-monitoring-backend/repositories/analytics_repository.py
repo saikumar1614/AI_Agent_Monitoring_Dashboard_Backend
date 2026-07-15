@@ -1,6 +1,6 @@
 from models.execution import Execution
 from models.agent import Agent
-from sqlalchemy import func
+from sqlalchemy.orm import load_only
 
 
 SUCCESS_STATUSES = {"succeeded"}
@@ -64,8 +64,119 @@ def _extract_latency_ms(execution: Execution) -> float:
 	return 0.0
 
 
+def _get_executions_in_range(db, start_dt, end_dt) -> list[Execution]:
+	return (
+		db.query(Execution)
+		.options(
+			load_only(
+				Execution.id,
+				Execution.agent_id,
+				Execution.status,
+				Execution.created_at,
+				Execution.started_at,
+				Execution.completed_at,
+				Execution.execution_metadata,
+			)
+		)
+		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
+		.order_by(Execution.created_at.asc())
+		.all()
+	)
+
+
+def _bucket_from_datetime(dt, granularity: str) -> str:
+	if granularity == "hourly":
+		return dt.strftime("%Y-%m-%d %H:00")
+	return dt.strftime("%Y-%m-%d")
+
+
+def _build_latency_aggregation(rows: list[Execution], granularity: str) -> list[dict]:
+	agg: dict[str, dict] = {}
+	for row in rows:
+		bucket = _bucket_from_datetime(row.created_at, granularity)
+		if bucket not in agg:
+			agg[bucket] = {
+				"bucket": bucket,
+				"latency_sum": 0.0,
+				"latency_count": 0,
+				"sample_size": 0,
+			}
+
+		latency = _extract_latency_ms(row)
+		if latency > 0:
+			agg[bucket]["latency_sum"] += latency
+			agg[bucket]["latency_count"] += 1
+
+		agg[bucket]["sample_size"] += 1
+
+	results: list[dict] = []
+	for bucket in sorted(agg.keys()):
+		latency_count = agg[bucket]["latency_count"]
+		avg_latency = (agg[bucket]["latency_sum"] / latency_count) if latency_count else 0.0
+		results.append(
+			{
+				"bucket": bucket,
+				"average_latency_ms": avg_latency,
+				"sample_size": agg[bucket]["sample_size"],
+			}
+		)
+
+	return results
+
+
+def _build_token_aggregation(rows: list[Execution], granularity: str) -> list[dict]:
+	agg: dict[str, dict] = {}
+	for row in rows:
+		bucket = _bucket_from_datetime(row.created_at, granularity)
+		if bucket not in agg:
+			agg[bucket] = {
+				"bucket": bucket,
+				"prompt_tokens": 0,
+				"completion_tokens": 0,
+				"total_tokens": 0,
+				"execution_count": 0,
+			}
+
+		metadata = row.execution_metadata
+		agg[bucket]["prompt_tokens"] += _extract_prompt_tokens(metadata)
+		agg[bucket]["completion_tokens"] += _extract_completion_tokens(metadata)
+		agg[bucket]["total_tokens"] += _extract_tokens(metadata)
+		agg[bucket]["execution_count"] += 1
+
+	return [agg[key] for key in sorted(agg.keys())]
+
+
+def _build_cost_trend_aggregation(rows: list[Execution], granularity: str) -> list[dict]:
+	agg: dict[str, dict] = {}
+	for row in rows:
+		bucket = _bucket_from_datetime(row.created_at, granularity)
+		if bucket not in agg:
+			agg[bucket] = {
+				"bucket": bucket,
+				"total_cost_usd": 0.0,
+				"execution_count": 0,
+			}
+
+		agg[bucket]["total_cost_usd"] += _extract_cost(row.execution_metadata)
+		agg[bucket]["execution_count"] += 1
+
+	return [agg[key] for key in sorted(agg.keys())]
+
+
 def get_dashboard_kpis(db) -> dict[str, float | int]:
-	executions = db.query(Execution).all()
+	executions = (
+		db.query(Execution)
+		.options(
+			load_only(
+				Execution.id,
+				Execution.status,
+				Execution.started_at,
+				Execution.completed_at,
+				Execution.execution_metadata,
+			)
+		)
+		.all()
+	)
 	total_executions = len(executions)
 
 	if total_executions == 0:
@@ -84,11 +195,11 @@ def get_dashboard_kpis(db) -> dict[str, float | int]:
 	total_cost = sum(_extract_cost(e.execution_metadata) for e in executions)
 	total_tokens = sum(_extract_tokens(e.execution_metadata) for e in executions)
 
-	latencies = [
-		_extract_latency_ms(e)
-		for e in executions
-		if _extract_latency_ms(e) > 0
-	]
+	latencies = []
+	for execution in executions:
+		latency = _extract_latency_ms(execution)
+		if latency > 0:
+			latencies.append(latency)
 	average_latency = (sum(latencies) / len(latencies)) if latencies else 0.0
 
 	return {
@@ -102,167 +213,51 @@ def get_dashboard_kpis(db) -> dict[str, float | int]:
 
 
 def get_hourly_latency_aggregation(db, start_dt, end_dt) -> list[dict]:
-	bucket_expr = func.strftime("%Y-%m-%d %H:00", Execution.created_at)
-	rows = (
-		db.query(bucket_expr.label("bucket"), func.count(Execution.id).label("sample_size"))
-		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
-		.group_by(bucket_expr)
-		.order_by(bucket_expr.asc())
-		.all()
-	)
-
-	results: list[dict] = []
-	for row in rows:
-		latency_rows = (
-			db.query(Execution)
-			.filter(bucket_expr == row.bucket)
-			.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
-			.all()
-		)
-		latencies = [_extract_latency_ms(item) for item in latency_rows if _extract_latency_ms(item) > 0]
-		avg_latency = (sum(latencies) / len(latencies)) if latencies else 0.0
-		results.append(
-			{
-				"bucket": row.bucket,
-				"average_latency_ms": avg_latency,
-				"sample_size": int(row.sample_size),
-			}
-		)
-
-	return results
+	rows = _get_executions_in_range(db, start_dt, end_dt)
+	return _build_latency_aggregation(rows, "hourly")
 
 
 def get_daily_latency_aggregation(db, start_dt, end_dt) -> list[dict]:
-	bucket_expr = func.strftime("%Y-%m-%d", Execution.created_at)
-	rows = (
-		db.query(bucket_expr.label("bucket"), func.count(Execution.id).label("sample_size"))
-		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
-		.group_by(bucket_expr)
-		.order_by(bucket_expr.asc())
-		.all()
-	)
-
-	results: list[dict] = []
-	for row in rows:
-		latency_rows = (
-			db.query(Execution)
-			.filter(bucket_expr == row.bucket)
-			.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
-			.all()
-		)
-		latencies = [_extract_latency_ms(item) for item in latency_rows if _extract_latency_ms(item) > 0]
-		avg_latency = (sum(latencies) / len(latencies)) if latencies else 0.0
-		results.append(
-			{
-				"bucket": row.bucket,
-				"average_latency_ms": avg_latency,
-				"sample_size": int(row.sample_size),
-			}
-		)
-
-	return results
+	rows = _get_executions_in_range(db, start_dt, end_dt)
+	return _build_latency_aggregation(rows, "daily")
 
 
 def get_hourly_token_aggregation(db, start_dt, end_dt) -> list[dict]:
-	bucket_expr = func.strftime("%Y-%m-%d %H:00", Execution.created_at)
-	rows = (
-		db.query(bucket_expr.label("bucket"), Execution.execution_metadata)
-		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
-		.order_by(bucket_expr.asc())
-		.all()
-	)
-
-	agg: dict[str, dict] = {}
-	for bucket, metadata in rows:
-		if bucket not in agg:
-			agg[bucket] = {
-				"bucket": bucket,
-				"prompt_tokens": 0,
-				"completion_tokens": 0,
-				"total_tokens": 0,
-				"execution_count": 0,
-			}
-
-		agg[bucket]["prompt_tokens"] += _extract_prompt_tokens(metadata)
-		agg[bucket]["completion_tokens"] += _extract_completion_tokens(metadata)
-		agg[bucket]["total_tokens"] += _extract_tokens(metadata)
-		agg[bucket]["execution_count"] += 1
-
-	return [agg[key] for key in sorted(agg.keys())]
+	rows = _get_executions_in_range(db, start_dt, end_dt)
+	return _build_token_aggregation(rows, "hourly")
 
 
 def get_daily_token_aggregation(db, start_dt, end_dt) -> list[dict]:
-	bucket_expr = func.strftime("%Y-%m-%d", Execution.created_at)
-	rows = (
-		db.query(bucket_expr.label("bucket"), Execution.execution_metadata)
-		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
-		.order_by(bucket_expr.asc())
-		.all()
-	)
-
-	agg: dict[str, dict] = {}
-	for bucket, metadata in rows:
-		if bucket not in agg:
-			agg[bucket] = {
-				"bucket": bucket,
-				"prompt_tokens": 0,
-				"completion_tokens": 0,
-				"total_tokens": 0,
-				"execution_count": 0,
-			}
-
-		agg[bucket]["prompt_tokens"] += _extract_prompt_tokens(metadata)
-		agg[bucket]["completion_tokens"] += _extract_completion_tokens(metadata)
-		agg[bucket]["total_tokens"] += _extract_tokens(metadata)
-		agg[bucket]["execution_count"] += 1
-
-	return [agg[key] for key in sorted(agg.keys())]
+	rows = _get_executions_in_range(db, start_dt, end_dt)
+	return _build_token_aggregation(rows, "daily")
 
 
 def get_daily_cost_trend_aggregation(db, start_dt, end_dt) -> list[dict]:
-	bucket_expr = func.strftime("%Y-%m-%d", Execution.created_at)
-	rows = (
-		db.query(bucket_expr.label("bucket"), Execution.execution_metadata)
-		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
-		.order_by(bucket_expr.asc())
-		.all()
-	)
-
-	agg: dict[str, dict] = {}
-	for bucket, metadata in rows:
-		if bucket not in agg:
-			agg[bucket] = {
-				"bucket": bucket,
-				"total_cost_usd": 0.0,
-				"execution_count": 0,
-			}
-
-		agg[bucket]["total_cost_usd"] += _extract_cost(metadata)
-		agg[bucket]["execution_count"] += 1
-
-	return [agg[key] for key in sorted(agg.keys())]
+	rows = _get_executions_in_range(db, start_dt, end_dt)
+	return _build_cost_trend_aggregation(rows, "daily")
 
 
 def get_cost_per_agent_aggregation(db, start_dt, end_dt) -> list[dict]:
-	rows = (
-		db.query(Execution.agent_id, Agent.name, Execution.execution_metadata)
-		.join(Agent, Agent.id == Execution.agent_id)
-		.filter(Execution.created_at >= start_dt, Execution.created_at <= end_dt)
-		.order_by(Agent.name.asc())
-		.all()
-	)
+	rows = _get_executions_in_range(db, start_dt, end_dt)
+	agent_ids = {item.agent_id for item in rows}
+	agent_name_map = {
+		agent_id: agent_name
+		for agent_id, agent_name in db.query(Agent.id, Agent.name).filter(Agent.id.in_(agent_ids)).all()
+	}
 
 	agg: dict[int, dict] = {}
-	for agent_id, agent_name, metadata in rows:
+	for item in rows:
+		agent_id = int(item.agent_id)
+		agent_name = agent_name_map.get(agent_id, f"Agent {agent_id}")
 		if agent_id not in agg:
 			agg[agent_id] = {
-				"agent_id": int(agent_id),
+				"agent_id": agent_id,
 				"agent_name": agent_name,
 				"total_cost_usd": 0.0,
 				"execution_count": 0,
 			}
 
-		agg[agent_id]["total_cost_usd"] += _extract_cost(metadata)
+		agg[agent_id]["total_cost_usd"] += _extract_cost(item.execution_metadata)
 		agg[agent_id]["execution_count"] += 1
 
 	return [agg[key] for key in sorted(agg.keys(), key=lambda k: agg[k]["agent_name"])]
