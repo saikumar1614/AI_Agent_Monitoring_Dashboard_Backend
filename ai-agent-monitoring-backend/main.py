@@ -31,6 +31,36 @@ from telemetry.opentelemetry_config import configure_telemetry
 Base.metadata.create_all(bind=engine)
 
 
+API_DESCRIPTION = """
+Backend APIs for monitoring AI agent lifecycle, execution quality, cost, token usage, latency, and observability.
+
+Authentication:
+- Obtain a JWT from /api/auth/login.
+- Use Swagger Authorize with: Bearer <token>.
+
+Primary capabilities:
+- Agent and execution CRUD
+- Live metrics and analytics aggregations
+- Tool usage and failure tracking
+- Langfuse completion tracking
+""".strip()
+
+
+OPENAPI_TAGS = [
+    {"name": "Auth", "description": "User signup, login, and token validation."},
+    {"name": "Agents", "description": "CRUD APIs for agent definitions and state."},
+    {"name": "Executions", "description": "CRUD APIs for agent execution records."},
+    {"name": "Dashboard", "description": "KPI endpoints for monitoring overview cards."},
+    {"name": "Analytics", "description": "Date-range latency, token, and cost aggregations."},
+    {"name": "Live", "description": "Live metrics and websocket stream support."},
+    {"name": "Tool Usage", "description": "Tool invocation tracking and usage analytics."},
+    {"name": "Failures", "description": "Execution failure logging and categorization."},
+    {"name": "Langfuse", "description": "Prompt/completion, token, cost, and latency tracking."},
+    {"name": "Health", "description": "Service health checks."},
+    {"name": "Root", "description": "API root metadata."},
+]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -44,7 +74,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
+    description=API_DESCRIPTION,
     debug=settings.DEBUG,
+    openapi_tags=OPENAPI_TAGS,
+    swagger_ui_parameters={"persistAuthorization": True},
     lifespan=lifespan,
 )
 
